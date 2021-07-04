@@ -1,0 +1,19 @@
+[Unit]
+Description=Minecraft Server
+
+Wants=network.target
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/usr/games/minecraft/minecraft_server
+
+ExecStart=screen -DmS mc java -Xms3G -Xmx3G -jar paper.jar --nogui
+
+ExecStop=screen -p 0 -S mc -X eval 'stuff "say SERVER SHUTTING DOWN. Saving map..."\\015'
+ExecStop=screen -p 0 -S mc -X eval 'stuff "save-all"\\015'
+ExecStop=screen -p 0 -S mc -X eval 'stuff "stop"\\015'
+ExecStop=sleep 2
+
+[Install]
+WantedBy=multi-user.target
