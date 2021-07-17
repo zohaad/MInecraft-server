@@ -1,49 +1,28 @@
 # Minecraft server
 
-## Server
+## Information
 
-I run the minecraft server on a t2.medium instance from Amazon. _Later this will be a spot instance (m5.large) when I figure out how to automatically attach EBS storage to it._
+We run the minecraft server on a m6g.large spot instance on Amazon EC2, at the time of writing it costs $0.0346/hr. Configuring the DNS (for changing IPs) is done through Route 53 and a launch script.
 
-The minecraft server is a [PaperMC server](https://papermc.io/), running on java 16. Install java 16 with `apt install openjdk-16-jre-headless`.
+## Creating the Launch Template
+*Creating the EFS*: Go to the Elastic File System dashboard and click on "Create file system". After it has been created, note down the file system ID.
 
-`/usr/games/minecraft/` contains:
+*Creating the AMI:* Create an EC2 instance. Install `amazon-efs-utils` if not on Amazon Linux 2 and run `mkdir /mnt/efs` to create a mounting point for the EFS drive. Then install java 16 with `apt install openjdk-16-jre-headless`. 
+
+*Getting Minecraft running:* Attach the EFS drive with `mount -t efs -o tls fs-...:/ /mnt/efs`, where you fill in the dots with your file system ID. Then save [PaperMC server](https://papermc.io/) to `/mnt/efs/minecraft_server/` as `paper.jar` and try running it. To switch between different Minecraft worlds you can create a symbolic link (shortcut, created with `ln -s destination source`) to the one you want to play on. E.g. this is what our drive looks like: 
 
 ```
-├── minecraft_server -> minecraft_server-1.16.5-manhunt
+├── minecraft_server -> minecraft_server-1.17.1-amplified
 ├── minecraft_server-1.16.5
-└── minecraft_server-1.16.5-manhunt
+├── minecraft_server-1.16.5-manhunt
+└── minecraft_server-1.17.1-amplified
 ```
+*Route 53:* Note down the hosted zone ID in Route 53. Create an A record, the IP does not matter.
+Make sure the [change resource](./change-resource-record-sets.json) file is placed at `/mnt/efs/change-resource-record-sets.json`.
 
-I used `ln -s minecraft_server-1.16.5-manhunt minecraft_server` to create a symbolic link (shortcut) to the minecraft server I want to play on.
+*Creating the launch template:* Create the launch template in EC2 by right clicking on your instance: Image and templates → Create template from instance, and provide the [user data script](./user_data.sh) with file system and hosted zone IDs filled in.
 
-To always start the server on boot I ran `systemctl enable minecraft.service`, you need the [configuration file](minecraft.service) at `/etc/systemd/system/minecraft.service`.
+## Todo's
 
-Playing on a new world now requires downloading or copying the server file and renaming it to `paper.jar`. Then running the appropriate ` ln -s target_path link_path` command and starting the service with `systemctl start minecraft.service` (provided the initial service is shut down), or restarting the server with `shutdown -r now`.
-
-
-## Website
-
-I have an instance on Digital Ocean serving a website, and the following DNS records
-![DNS records](DNS_records.png)
-
-I tried using iptables to forward minecraft tcp traffic but couldn't get it to work, so I'm using an SRV record.
-
-The website is powered by [Express](https://expressjs.com/) with [basic auth](https://www.npmjs.com/package/express-basic-auth) (over HTTPS), uses the [AWS SDK for JavaScript](https://aws.amazon.com/sdk-for-javascript/) to start/stop the instance, and in `/etc/nginx/sites-enabled/mc-site`
-
-```
-server {
-    # this is not all there is...
-    listen 443 ssl;
-    server_name minecraft.example.com
-    location / {
-        proxy_pass http://localhost:8080;
-        # ...
-    }
-}
-```
-
-The webserver is run using screen: `screen -S mc-site`, then `node .` and `ctrl+a d` to detach from the screen session.
-
-The website looks like
-
-![Minecraft Server](mcserver.png)
+- Figure out how to connect to changing IPs with ssh.
+- Instead of `screen`, configure `systemctl` to launch the Minecraft server.
